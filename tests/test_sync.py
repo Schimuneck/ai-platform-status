@@ -154,6 +154,8 @@ class StatusAssemblyTest(unittest.TestCase):
         self.assertEqual(workflows[0]["conclusion"], "success")
         self.assertEqual(workflows[0]["branch"], "main")
         self.assertEqual(workflows[1]["status"], "missing")
+        self.assertEqual(image["pullTag"], "odh-stable")
+        self.assertEqual(status["products"][0]["docs"], [])
 
 
 if __name__ == "__main__":

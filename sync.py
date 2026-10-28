@@ -100,11 +100,16 @@ def registry_url(repository: str) -> str:
 def summarize_image(image: dict, tags: list[dict]) -> dict:
     builds = [public_tag(tag) for tag in select_build_tags(tags)]
     channels = [public_tag(tag) for tag in select_channels(tags)]
-    last_modified = builds[0]["lastModified"] if builds else None
+    pull_tag = image.get("pullTag") or "odh-stable"
+    pull = next((tag for tag in channels if tag["name"] == pull_tag), None)
+    last_modified = (pull or (builds[0] if builds else None) or {}).get("lastModified")
     return {
         "name": image["name"],
+        "role": image.get("role", ""),
         "repository": image["repository"],
         "registryUrl": registry_url(image["repository"]),
+        "pullTag": pull_tag,
+        "pull": pull,
         "lastModified": last_modified,
         "channels": channels,
         "builds": builds,
@@ -149,17 +154,21 @@ def build_status(
             {
                 "key": product["key"],
                 "name": product["name"],
+                "tagline": product.get("tagline", ""),
                 "summary": product.get("summary", ""),
+                "requirements": product.get("requirements", ""),
                 "source": product.get("source"),
+                "docs": product.get("docs") or [],
+                "downloads": product.get("downloads") or [],
                 "images": [
                     summarize_image(image, tags_by_repo.get(image["repository"], []))
-                    for image in product["images"]
+                    for image in product.get("images") or []
                 ],
                 "workflows": [
                     summarize_workflow(
                         workflow, runs_by_key.get((workflow["repo"], workflow["name"]))
                     )
-                    for workflow in product["workflows"]
+                    for workflow in product.get("workflows") or []
                 ],
             }
         )
@@ -276,11 +285,11 @@ def collect(catalog: dict) -> dict:
     workflow_indexes: dict[str, dict[str, dict]] = {}
 
     for product in catalog["products"]:
-        for image in product["images"]:
+        for image in product.get("images") or []:
             repository = image["repository"]
             if repository not in tags_by_repo:
                 tags_by_repo[repository] = fetch_image_tags(repository)
-        for workflow in product["workflows"]:
+        for workflow in product.get("workflows") or []:
             repo = workflow["repo"]
             if repo not in workflow_indexes:
                 workflow_indexes[repo] = fetch_workflow_index(repo, headers)

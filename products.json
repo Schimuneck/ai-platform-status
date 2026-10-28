@@ -3,51 +3,37 @@
     {
       "key": "openshell",
       "name": "OpenShell",
-      "summary": "Public image tags on quay.io/opendatahub, plus the OpenShell GitHub Actions workflows that have run on opendatahub-io/openshell. The reusable Kubernetes, Docker, Podman, GPU, and VM end-to-end workflows have no top-level runs in that repository.",
+      "tagline": "Sandbox runtime for AI agents on Red Hat OpenShift AI",
+      "description": "OpenShell provides isolated execution environments for autonomous AI agents, governed by declarative YAML policies. Agents can use files, tools, and credentials without unrestricted access to your infrastructure. Part of the Red Hat OpenShift AI platform.",
+      "requirements": "Red Hat OpenShift AI 3.6 or later, or standalone on Linux / macOS (Apple Silicon) / Windows WSL 2 with Docker or Podman.",
       "source": "https://github.com/opendatahub-io/openshell",
+      "docs": [
+        { "title": "Getting started", "detail": "Installation, first sandbox, and your first agent walkthrough.", "url": "https://docs.nvidia.com/openshell/latest/about/run-your-first-agent", "icon": "rocket" },
+        { "title": "Architecture", "detail": "How the gateway, supervisor, policy engine, and sandbox fit together.", "url": "https://docs.nvidia.com/openshell/latest/about/architecture", "icon": "layers" },
+        { "title": "Policies", "detail": "Filesystem, network, and process rules. Hot-reload network policy at runtime.", "url": "https://docs.nvidia.com/openshell/latest/how-it-works/policies/overview", "icon": "shield" },
+        { "title": "Kubernetes deployment", "detail": "Deploy the gateway with Helm on OpenShift. NetworkPolicy enforcement required.", "url": "https://docs.nvidia.com/openshell/latest/kubernetes/setup", "icon": "cube" },
+        { "title": "SDKs", "detail": "Python, TypeScript, Go, and Rust client libraries for the gateway API.", "url": "https://docs.nvidia.com/openshell/latest/index.html", "icon": "code" },
+        { "title": "Full documentation", "detail": "Complete reference for all OpenShell features.", "url": "https://docs.nvidia.com/openshell/latest/index.html", "icon": "book" }
+      ],
+      "downloads": [
+        { "title": "CLI (recommended)", "detail": "Installs the openshell command and a local gateway.", "value": "curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | sh" },
+        { "title": "Python package", "detail": "Requires uv. Pins to the latest stable release.", "value": "uv tool install -U openshell" },
+        { "title": "Helm chart", "detail": "Deploy the gateway into an OpenShift or Kubernetes cluster.", "value": "helm install openshell oci://ghcr.io/nvidia/openshell/helm-chart" },
+        { "title": "Container pull", "detail": "Pull the gateway image directly. Works with podman or docker.", "value": "podman pull quay.io/opendatahub/odh-openshell-gateway:odh-stable" }
+      ],
       "images": [
-        {
-          "name": "Gateway",
-          "repository": "quay.io/opendatahub/odh-openshell-gateway"
-        },
-        {
-          "name": "Supervisor",
-          "repository": "quay.io/opendatahub/odh-openshell-supervisor"
-        },
-        {
-          "name": "Sandbox",
-          "repository": "quay.io/opendatahub/odh-openshell-sandbox"
-        },
-        {
-          "name": "CLI",
-          "repository": "quay.io/opendatahub/odh-openshell-cli"
-        }
+        { "name": "Gateway", "role": "Control-plane API: sandbox lifecycle, auth boundary, and policy distribution.", "repository": "quay.io/opendatahub/odh-openshell-gateway", "pullTag": "odh-stable" },
+        { "name": "Supervisor", "role": "Sidecar that enforces policy beside each sandbox container.", "repository": "quay.io/opendatahub/odh-openshell-supervisor", "pullTag": "odh-stable" },
+        { "name": "Sandbox", "role": "Isolated runtime where the agent executes. Kernel-level confinement.", "repository": "quay.io/opendatahub/odh-openshell-sandbox", "pullTag": "odh-stable" },
+        { "name": "CLI", "role": "The openshell command packaged as a container image.", "repository": "quay.io/opendatahub/odh-openshell-cli", "pullTag": "odh-stable" }
       ],
       "workflows": [
-        {
-          "repo": "opendatahub-io/openshell",
-          "name": "Build CI Image"
-        },
-        {
-          "repo": "opendatahub-io/openshell",
-          "name": "ODH Trivy Image Scan"
-        },
-        {
-          "repo": "opendatahub-io/openshell",
-          "name": "Required CI Gates"
-        },
-        {
-          "repo": "opendatahub-io/openshell",
-          "name": "ODH Python Gate Checks"
-        },
-        {
-          "repo": "opendatahub-io/openshell",
-          "name": "ODH Deploy Contract"
-        },
-        {
-          "repo": "opendatahub-io/openshell",
-          "name": "Disconnected Readiness"
-        }
+        { "repo": "opendatahub-io/openshell", "name": "Build CI Image" },
+        { "repo": "opendatahub-io/openshell", "name": "ODH Trivy Image Scan" },
+        { "repo": "opendatahub-io/openshell", "name": "Required CI Gates" },
+        { "repo": "opendatahub-io/openshell", "name": "ODH Python Gate Checks" },
+        { "repo": "opendatahub-io/openshell", "name": "ODH Deploy Contract" },
+        { "repo": "opendatahub-io/openshell", "name": "Disconnected Readiness" }
       ]
     }
   ]

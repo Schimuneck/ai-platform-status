@@ -1,162 +1,247 @@
-const productsEl = document.querySelector("#products");
-const generatedEl = document.querySelector("#generated");
+/* ── Helpers ─────────────────────────────────────────────────────────── */
 
-function el(tag, className, text) {
+function el(tag, cls, text) {
   const node = document.createElement(tag);
-  if (className) node.className = className;
+  if (cls) node.className = cls;
   if (text != null) node.textContent = text;
   return node;
 }
 
-function formatWhen(value) {
+function formatDate(value) {
   if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(d);
 }
 
 function shortDigest(digest) {
   if (!digest) return "";
-  const hex = digest.replace(/^sha256:/, "");
-  return `sha256:${hex.slice(0, 12)}`;
+  return "sha256:" + digest.replace(/^sha256:/, "").slice(0, 12);
 }
 
-function resultLabel(workflow) {
-  if (workflow.status === "queued" || workflow.status === "pending" || workflow.status === "waiting") {
-    return { text: "Queued", className: "run" };
-  }
-  if (workflow.status === "in_progress") return { text: "Running", className: "run" };
-  const conclusion = workflow.conclusion;
-  if (conclusion === "success") return { text: "Passed", className: "ok" };
-  if (conclusion === "failure" || conclusion === "timed_out") return { text: "Failed", className: "bad" };
-  if (conclusion === "cancelled") return { text: "Cancelled", className: "neutral" };
-  if (conclusion === "skipped") return { text: "Skipped", className: "neutral" };
-  if (workflow.status === "missing" || !conclusion) return { text: "No runs", className: "neutral" };
-  return { text: conclusion, className: "neutral" };
+function extLink(url, text, cls) {
+  const a = el("a", cls, text);
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noreferrer";
+  return a;
 }
 
-function link(href, text, className) {
-  const anchor = el("a", className, text);
-  anchor.href = href;
-  anchor.rel = "noreferrer";
-  return anchor;
+function statusPill(workflow) {
+  const s = workflow.status;
+  const c = workflow.conclusion;
+  if (s === "queued" || s === "pending" || s === "waiting") return ["Queued", "pill-info"];
+  if (s === "in_progress") return ["Running", "pill-warn"];
+  if (c === "success") return ["Passed", "pill-ok"];
+  if (c === "failure" || c === "timed_out") return ["Failed", "pill-bad"];
+  if (c === "cancelled") return ["Cancelled", "pill-neutral"];
+  if (c === "skipped") return ["Skipped", "pill-neutral"];
+  return ["No data", "pill-neutral"];
 }
 
-function tagList(tags) {
-  const list = el("ul", "channels");
-  if (!tags.length) {
-    list.append(el("li", null, "No channel tags in the latest sync."));
-    return list;
-  }
-  for (const tag of tags) {
-    const item = el("li");
-    item.append(el("span", "mono", tag.name));
-    item.append(document.createTextNode(` · ${shortDigest(tag.digest)} · ${formatWhen(tag.lastModified)}`));
-    list.append(item);
-  }
-  return list;
+async function copyCmd(text, btn) {
+  const orig = btn.textContent;
+  try { await navigator.clipboard.writeText(text); btn.textContent = "Copied!"; }
+  catch { btn.textContent = "Error"; }
+  setTimeout(() => { btn.textContent = orig; }, 1400);
 }
 
-function table(headers, rows) {
-  const wrap = el("div", "table-wrap");
-  const tableEl = document.createElement("table");
-  const head = document.createElement("thead");
-  const headRow = document.createElement("tr");
-  for (const header of headers) headRow.append(el("th", null, header));
-  head.append(headRow);
-  const body = document.createElement("tbody");
-  for (const row of rows) {
-    const tr = document.createElement("tr");
-    for (const cell of row) tr.append(cell);
-    body.append(tr);
-  }
-  tableEl.append(head, body);
-  wrap.append(tableEl);
+function cmdBlock(value) {
+  const wrap = el("div", "cmd-wrap");
+  wrap.append(el("code", null, value));
+  const btn = el("button", "cmd-copy", "Copy");
+  btn.type = "button";
+  btn.addEventListener("click", () => copyCmd(value, btn));
+  wrap.append(btn);
   return wrap;
 }
 
-function cell(node) {
-  const td = document.createElement("td");
-  if (typeof node === "string") td.textContent = node;
-  else td.append(node);
-  return td;
+/* ── Data fetching ──────────────────────────────────────────────────── */
+
+let catalog = null;
+let liveData = null;
+
+async function loadData() {
+  const [cat, live] = await Promise.all([
+    fetch("products.json", { cache: "no-store" }).then(r => r.json()),
+    fetch("data/status.json", { cache: "no-store" }).then(r => r.json()).catch(() => null),
+  ]);
+  catalog = cat;
+  liveData = live;
 }
 
-function renderProduct(product) {
-  const section = el("section", "product");
-  const head = el("div", "product-head");
-  head.append(el("h2", null, product.name));
-  if (product.source) head.append(link(product.source, "Source", "source"));
-  section.append(head);
-  if (product.summary) section.append(el("p", "summary", product.summary));
+function liveProduct(key) {
+  return (liveData?.products || []).find(p => p.key === key) || null;
+}
 
-  section.append(el("h3", null, "Current tags"));
-  const channelBlock = el("div");
-  for (const image of product.images) {
-    const title = el("p", "mono", image.name);
-    channelBlock.append(title, tagList(image.channels || []));
+/* ── Sidebar ────────────────────────────────────────────────────────── */
+
+const nav = document.getElementById("product-nav");
+const syncEl = document.getElementById("sync-time");
+const contentInner = document.getElementById("content-inner");
+const sidebar = document.getElementById("sidebar");
+const toggle = document.getElementById("menu-toggle");
+let activeKey = null;
+
+toggle.addEventListener("click", () => sidebar.classList.toggle("open"));
+
+function buildNav() {
+  const products = catalog?.products || [];
+  products.forEach(product => {
+    const item = el("a", "nav-item", product.name);
+    item.dataset.key = product.key;
+    item.addEventListener("click", () => selectProduct(product.key));
+    nav.append(item);
+  });
+  if (liveData?.generatedAt) {
+    syncEl.textContent = "Synced " + formatDate(liveData.generatedAt);
   }
-  section.append(channelBlock);
+}
 
-  section.append(el("h3", null, "Recent image builds"));
-  section.append(
-    table(
-      ["Component", "Tag", "Digest", "Pushed", "Registry"],
-      product.images.flatMap((image) => {
-        if (!image.builds.length) {
-          return [[cell(image.name), cell("No public tags"), cell(""), cell(""), cell(link(image.registryUrl, "Quay"))]];
-        }
-        return image.builds.map((build) => [
-          cell(image.name),
-          cell(link(`${image.registryUrl}?tab=tags`, build.name, "mono")),
-          cell(el("span", "mono", shortDigest(build.digest))),
-          cell(formatWhen(build.lastModified)),
-          cell(link(image.registryUrl, "Quay")),
-        ]);
-      }),
-    ),
-  );
+function selectProduct(key) {
+  if (activeKey === key) return;
+  activeKey = key;
+  nav.querySelectorAll(".nav-item").forEach(item => {
+    item.classList.toggle("active", item.dataset.key === key);
+  });
+  sidebar.classList.remove("open");
+  const product = (catalog?.products || []).find(p => p.key === key);
+  if (!product) return;
+  renderProduct(product);
+  window.scrollTo(0, 0);
+  history.replaceState(null, "", "#" + key);
+}
 
-  section.append(el("h3", null, "Tests"));
-  section.append(
-    table(
-      ["Workflow", "Result", "Branch", "Updated", "Run"],
-      product.workflows.map((workflow) => {
-        const result = resultLabel(workflow);
-        const pill = el("span", `pill ${result.className}`, result.text);
-        return [
-          cell(workflow.name),
-          cell(pill),
-          cell(workflow.branch || ""),
-          cell(formatWhen(workflow.updatedAt)),
-          cell(link(workflow.url, "Open")),
-        ];
-      }),
-    ),
-  );
+/* ── Renderers ──────────────────────────────────────────────────────── */
+
+function renderHero(p) {
+  const hero = el("div", "hero");
+  hero.append(el("div", "hero-eyebrow", "Red Hat OpenShift AI"));
+  hero.append(el("h1", null, p.name));
+  if (p.tagline) hero.append(el("p", "hero-tagline", p.tagline));
+  if (p.description) hero.append(el("p", "hero-description", p.description));
+  const actions = el("div", "hero-actions");
+  const primaryDoc = (p.docs || []).find(d => d.url);
+  if (primaryDoc) actions.append(extLink(primaryDoc.url, "Get started →", "btn btn-primary"));
+  if (p.source) actions.append(extLink(p.source, "Source code", "btn btn-secondary"));
+  hero.append(actions);
+  return hero;
+}
+
+function renderInstall(p) {
+  const section = el("div", "section");
+  section.id = "install";
+  section.append(el("h2", null, "Install"));
+  section.append(el("p", "section-lead", "Choose the method that fits your environment."));
+  if (p.requirements) {
+    const req = el("div", "requirements");
+    req.append(el("strong", null, "Requirements: "));
+    req.append(document.createTextNode(p.requirements));
+    section.append(req);
+  }
+  const grid = el("div", "cards");
+  for (const dl of p.downloads || []) {
+    const card = el("div", "card");
+    card.append(el("h3", null, dl.title));
+    if (dl.detail) card.append(el("p", null, dl.detail));
+    card.append(cmdBlock(dl.value));
+    grid.append(card);
+  }
+  section.append(grid);
   return section;
 }
 
-async function load() {
-  try {
-    const response = await fetch("data/status.json", { cache: "no-store" });
-    if (!response.ok) throw new Error(`status.json returned ${response.status}`);
-    const status = await response.json();
-    generatedEl.textContent = `Synced ${formatWhen(status.generatedAt)} from public Quay and GitHub Actions.`;
-    productsEl.replaceChildren(...status.products.map(renderProduct));
-  } catch (error) {
-    generatedEl.textContent = "";
-    productsEl.replaceChildren(
-      el(
-        "p",
-        "error",
-        `No status snapshot yet. From the repo root, run python3 sync.py and reload. (${error.message})`,
-      ),
-    );
+function renderDocs(p) {
+  const section = el("div", "section");
+  section.id = "docs";
+  section.append(el("h2", null, "Documentation"));
+  section.append(el("p", "section-lead", "Everything you need to deploy, configure, and operate."));
+  const grid = el("div", "cards");
+  for (const doc of p.docs || []) {
+    const card = extLink(doc.url, null, "card doc-card");
+    card.append(el("h3", null, doc.title));
+    if (doc.detail) card.append(el("p", null, doc.detail));
+    card.append(el("span", "doc-open", "Open →"));
+    grid.append(card);
   }
+  section.append(grid);
+  return section;
 }
 
-load();
+function renderImages(p, live) {
+  const section = el("div", "section");
+  section.id = "images";
+  section.append(el("h2", null, "Container images"));
+  section.append(el("p", "section-lead", "Published to the public Open Data Hub Quay organisation. Pull with podman or docker."));
+  const liveImages = new Map((live?.images || []).map(i => [i.repository, i]));
+  const grid = el("div", "image-row");
+  for (const img of p.images || []) {
+    const card = el("div", "image-card");
+    card.append(el("h3", null, img.name));
+    if (img.role) card.append(el("p", "role", img.role));
+    const tag = img.pullTag || "odh-stable";
+    card.append(cmdBlock(`podman pull ${img.repository}:${tag}`));
+    const liveImg = liveImages.get(img.repository);
+    const meta = el("div", "image-meta");
+    if (liveImg?.pull) {
+      meta.innerHTML = `<strong>${tag}</strong> · ${shortDigest(liveImg.pull.digest)} · ${formatDate(liveImg.pull.lastModified)}<br/>`;
+    }
+    const repo = img.repository.replace("quay.io/", "");
+    meta.append(extLink(`https://quay.io/repository/${repo}`, "View on Quay →", null));
+    card.append(meta);
+    grid.append(card);
+  }
+  section.append(grid);
+  return section;
+}
+
+function renderChecks(live) {
+  const workflows = live?.workflows || [];
+  if (!workflows.length) return null;
+  const section = el("div", "section");
+  section.id = "checks";
+  section.append(el("h2", null, "CI status"));
+  section.append(el("p", "section-lead", "Public GitHub Actions from the Open Data Hub repository."));
+  const list = el("ul", "checks-list");
+  for (const wf of workflows) {
+    const row = el("li", "check-row");
+    const info = el("div", "check-info");
+    info.append(el("div", "check-name", wf.name));
+    const meta = [wf.branch, formatDate(wf.updatedAt)].filter(Boolean).join(" · ");
+    if (meta) info.append(el("div", "check-meta", meta));
+    row.append(info);
+    const [label, cls] = statusPill(wf);
+    row.append(el("span", "pill " + cls, label));
+    if (wf.url) row.append(extLink(wf.url, "View", "check-link"));
+    list.append(row);
+  }
+  section.append(list);
+  return section;
+}
+
+function renderProduct(p) {
+  const live = liveProduct(p.key);
+  const fragment = document.createDocumentFragment();
+  fragment.append(renderHero(p));
+  fragment.append(renderInstall(p));
+  fragment.append(renderDocs(p));
+  fragment.append(renderImages(p, live));
+  const checks = renderChecks(live);
+  if (checks) fragment.append(checks);
+  contentInner.replaceChildren(fragment);
+}
+
+/* ── Init ───────────────────────────────────────────────────────────── */
+
+(async () => {
+  try {
+    await loadData();
+    buildNav();
+    const hash = location.hash.replace("#", "");
+    const first = (catalog?.products || [])[0];
+    const initial = hash && (catalog?.products || []).find(p => p.key === hash) ? hash : first?.key;
+    if (initial) selectProduct(initial);
+  } catch (err) {
+    contentInner.innerHTML = `<div class="splash"><h1>Could not load</h1><p>${err.message}</p></div>`;
+  }
+})();
