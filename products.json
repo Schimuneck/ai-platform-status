@@ -1,0 +1,54 @@
+{
+  "products": [
+    {
+      "key": "openshell",
+      "name": "OpenShell",
+      "summary": "Public image tags on quay.io/opendatahub, plus the OpenShell GitHub Actions workflows that have run on opendatahub-io/openshell. The reusable Kubernetes, Docker, Podman, GPU, and VM end-to-end workflows have no top-level runs in that repository.",
+      "source": "https://github.com/opendatahub-io/openshell",
+      "images": [
+        {
+          "name": "Gateway",
+          "repository": "quay.io/opendatahub/odh-openshell-gateway"
+        },
+        {
+          "name": "Supervisor",
+          "repository": "quay.io/opendatahub/odh-openshell-supervisor"
+        },
+        {
+          "name": "Sandbox",
+          "repository": "quay.io/opendatahub/odh-openshell-sandbox"
+        },
+        {
+          "name": "CLI",
+          "repository": "quay.io/opendatahub/odh-openshell-cli"
+        }
+      ],
+      "workflows": [
+        {
+          "repo": "opendatahub-io/openshell",
+          "name": "Build CI Image"
+        },
+        {
+          "repo": "opendatahub-io/openshell",
+          "name": "ODH Trivy Image Scan"
+        },
+        {
+          "repo": "opendatahub-io/openshell",
+          "name": "Required CI Gates"
+        },
+        {
+          "repo": "opendatahub-io/openshell",
+          "name": "ODH Python Gate Checks"
+        },
+        {
+          "repo": "opendatahub-io/openshell",
+          "name": "ODH Deploy Contract"
+        },
+        {
+          "repo": "opendatahub-io/openshell",
+          "name": "Disconnected Readiness"
+        }
+      ]
+    }
+  ]
+}

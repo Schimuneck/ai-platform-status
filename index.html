@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI platform status</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%231d1a16'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="page-header">
+      <p class="eyebrow">Public build and test status</p>
+      <h1>AI platform status</h1>
+      <p class="lede">
+        Image tags from public Quay repositories and test runs from public GitHub
+        Actions. OpenShell is the first product. Add another by editing
+        <code>products.json</code> and running the sync job.
+      </p>
+      <p id="generated" class="meta">Loading the latest sync…</p>
+    </header>
+    <main id="products"></main>
+    <script src="app.js"></script>
+  </body>
+</html>
