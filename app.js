@@ -201,21 +201,34 @@ function renderChecks(live) {
   const section = el("div", "section");
   section.id = "checks";
   section.append(el("h2", null, "CI status"));
-  section.append(el("p", "section-lead", "Public GitHub Actions from the Open Data Hub repository."));
-  const list = el("ul", "checks-list");
+  section.append(el("p", "section-lead", "Public GitHub Actions workflows across downstream and upstream repositories."));
+
+  const groups = new Map();
   for (const wf of workflows) {
-    const row = el("li", "check-row");
-    const info = el("div", "check-info");
-    info.append(el("div", "check-name", wf.name));
-    const meta = [wf.branch, formatDate(wf.updatedAt)].filter(Boolean).join(" · ");
-    if (meta) info.append(el("div", "check-meta", meta));
-    row.append(info);
-    const [label, cls] = statusPill(wf);
-    row.append(el("span", "pill " + cls, label));
-    if (wf.url) row.append(extLink(wf.url, "View", "check-link"));
-    list.append(row);
+    const repo = wf.repo || "unknown";
+    if (!groups.has(repo)) groups.set(repo, []);
+    groups.get(repo).push(wf);
   }
-  section.append(list);
+
+  for (const [repo, wfs] of groups) {
+    const groupLabel = el("div", "check-group-label");
+    groupLabel.append(extLink(`https://github.com/${repo}/actions`, repo, null));
+    section.append(groupLabel);
+    const list = el("ul", "checks-list");
+    for (const wf of wfs) {
+      const row = el("li", "check-row");
+      const info = el("div", "check-info");
+      info.append(el("div", "check-name", wf.name));
+      const meta = [wf.branch, formatDate(wf.updatedAt)].filter(Boolean).join(" · ");
+      if (meta) info.append(el("div", "check-meta", meta));
+      row.append(info);
+      const [label, cls] = statusPill(wf);
+      row.append(el("span", "pill " + cls, label));
+      if (wf.url) row.append(extLink(wf.url, "View", "check-link"));
+      list.append(row);
+    }
+    section.append(list);
+  }
   return section;
 }
 

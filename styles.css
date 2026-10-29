@@ -361,6 +361,25 @@ body {
 
 .check-link:hover { text-decoration: underline; }
 
+.check-group-label {
+  margin-top: 1rem;
+  margin-bottom: .25rem;
+  font-size: .78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--ink-secondary);
+}
+
+.check-group-label a {
+  color: var(--ink-secondary);
+  text-decoration: none;
+}
+
+.check-group-label a:hover { color: var(--red); text-decoration: underline; }
+
+.check-group-label:first-child { margin-top: 0; }
+
 /* ── Status pill ────────────────────────────────────────────────────── */
 .pill {
   display: inline-block;

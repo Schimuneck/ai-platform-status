@@ -6,7 +6,7 @@
       "tagline": "Sandbox runtime for AI agents on Red Hat OpenShift AI",
       "description": "OpenShell provides isolated execution environments for autonomous AI agents, governed by declarative YAML policies. Agents can use files, tools, and credentials without unrestricted access to your infrastructure. Part of the Red Hat OpenShift AI platform.",
       "requirements": "Red Hat OpenShift AI 3.6 or later, or standalone on Linux / macOS (Apple Silicon) / Windows WSL 2 with Docker or Podman.",
-      "source": "https://github.com/opendatahub-io/openshell",
+      "source": "https://github.com/red-hat-data-services/openshell",
       "docs": [
         { "title": "Getting started", "detail": "Installation, first sandbox, and your first agent walkthrough.", "url": "https://docs.nvidia.com/openshell/latest/about/run-your-first-agent", "icon": "rocket" },
         { "title": "Architecture", "detail": "How the gateway, supervisor, policy engine, and sandbox fit together.", "url": "https://docs.nvidia.com/openshell/latest/about/architecture", "icon": "layers" },
@@ -25,10 +25,17 @@
         { "name": "Gateway", "role": "Control-plane API: sandbox lifecycle, auth boundary, and policy distribution.", "repository": "quay.io/opendatahub/odh-openshell-gateway", "pullTag": "odh-stable" },
         { "name": "Supervisor", "role": "Sidecar that enforces policy beside each sandbox container.", "repository": "quay.io/opendatahub/odh-openshell-supervisor", "pullTag": "odh-stable" },
         { "name": "Sandbox", "role": "Isolated runtime where the agent executes. Kernel-level confinement.", "repository": "quay.io/opendatahub/odh-openshell-sandbox", "pullTag": "odh-stable" },
-        { "name": "CLI", "role": "The openshell command packaged as a container image.", "repository": "quay.io/opendatahub/odh-openshell-cli", "pullTag": "odh-stable" }
+        { "name": "Sandbox (OpenClaw)", "role": "Alternative sandbox image built with the OpenClaw runtime.", "repository": "quay.io/opendatahub/odh-openshell-sandbox-openclaw", "pullTag": "odh-stable" },
+        { "name": "CLI", "role": "The openshell command packaged as a container image.", "repository": "quay.io/opendatahub/odh-openshell-cli", "pullTag": "odh-stable" },
+        { "name": "E2E Tests", "role": "Shift-left end-to-end test runner. Built by Konflux, runs integration tests against OpenShift.", "repository": "quay.io/opendatahub/odh-openshell-e2e", "pullTag": "odh-stable" }
       ],
       "workflows": [
-        { "repo": "opendatahub-io/openshell", "name": "Build CI Image" },
+        { "repo": "red-hat-data-services/openshell", "name": "Required CI Gates" },
+        { "repo": "red-hat-data-services/openshell", "name": "Build CI Image" },
+        { "repo": "red-hat-data-services/openshell", "name": "Trivy Changes" },
+        { "repo": "red-hat-data-services/openshell", "name": "Dependency Review" },
+        { "repo": "red-hat-data-services/openshell", "name": "Workflow Security Reports" },
+        { "repo": "red-hat-data-services/openshell", "name": "CodeQL" },
         { "repo": "opendatahub-io/openshell", "name": "ODH Trivy Image Scan" },
         { "repo": "opendatahub-io/openshell", "name": "Required CI Gates" },
         { "repo": "opendatahub-io/openshell", "name": "ODH Python Gate Checks" },
