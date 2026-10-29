@@ -1,0 +1,6 @@
+FROM registry.access.redhat.com/ubi9/python-312:latest
+
+COPY sync.py products.json ./
+RUN pip install --no-cache-dir --upgrade pip
+
+CMD ["sh", "-c", "python sync.py && while true; do sleep 900; python sync.py; done"]
