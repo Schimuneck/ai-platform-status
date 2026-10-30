@@ -167,11 +167,12 @@ function renderHero(p) {
   hero.append(el("div", "hero-eyebrow", "Red Hat OpenShift AI"));
   hero.append(el("h1", null, p.name));
   if (p.tagline) hero.append(el("p", "hero-tagline", p.tagline));
-  if (p.source) {
-    const actions = el("div", "hero-actions");
-    actions.append(extLink(p.source, "Source code →", "btn btn-secondary"));
-    hero.append(actions);
-  }
+  if (p.description) hero.append(el("p", "hero-description", p.description));
+  const actions = el("div", "hero-actions");
+  const primaryDoc = (p.docs || []).find(d => d.url);
+  if (primaryDoc) actions.append(extLink(primaryDoc.url, "Get started →", "btn btn-primary"));
+  if (p.source) actions.append(extLink(p.source, "Source code", "btn btn-secondary"));
+  hero.append(actions);
   return hero;
 }
 
