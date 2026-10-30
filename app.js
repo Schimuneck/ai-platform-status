@@ -82,6 +82,7 @@ const contentInner = document.getElementById("content-inner");
 const sidebar = document.getElementById("sidebar");
 const toggle = document.getElementById("menu-toggle");
 let activeKey = null;
+let activeTab = null;
 
 toggle.addEventListener("click", () => sidebar.classList.toggle("open"));
 
@@ -99,8 +100,8 @@ function buildNav() {
 }
 
 function selectProduct(key) {
-  if (activeKey === key) return;
   activeKey = key;
+  activeTab = null;
   nav.querySelectorAll(".nav-item").forEach(item => {
     item.classList.toggle("active", item.dataset.key === key);
   });
@@ -112,6 +113,53 @@ function selectProduct(key) {
   history.replaceState(null, "", "#" + key);
 }
 
+/* ── Tab system ─────────────────────────────────────────────────────── */
+
+const TABS = [
+  { id: "status", label: "Status" },
+  { id: "releases", label: "Releases" },
+  { id: "images", label: "Container Images" },
+  { id: "install", label: "Install" },
+  { id: "docs", label: "Documentation" },
+];
+
+function renderTabs(product, live) {
+  const bar = el("div", "tab-bar");
+  for (const tab of TABS) {
+    const btn = el("button", "tab-btn", tab.label);
+    btn.dataset.tab = tab.id;
+    btn.type = "button";
+    if (tab.id === "status") btn.classList.add("active");
+    btn.addEventListener("click", () => switchTab(tab.id, product, live));
+    bar.append(btn);
+  }
+  return bar;
+}
+
+function switchTab(tabId, product, live) {
+  if (activeTab === tabId) return;
+  activeTab = tabId;
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.tab === tabId);
+  });
+  const pane = document.getElementById("tab-pane");
+  if (!pane) return;
+  pane.replaceChildren(renderTabContent(tabId, product, live));
+  pane.scrollTop = 0;
+}
+
+function renderTabContent(tabId, product, live) {
+  const frag = document.createDocumentFragment();
+  switch (tabId) {
+    case "status": frag.append(renderStatus(product, live)); break;
+    case "releases": frag.append(renderReleases(product, live)); break;
+    case "images": frag.append(renderImages(product, live)); break;
+    case "install": frag.append(renderInstall(product)); break;
+    case "docs": frag.append(renderDocs(product)); break;
+  }
+  return frag;
+}
+
 /* ── Renderers ──────────────────────────────────────────────────────── */
 
 function renderHero(p) {
@@ -119,65 +167,143 @@ function renderHero(p) {
   hero.append(el("div", "hero-eyebrow", "Red Hat OpenShift AI"));
   hero.append(el("h1", null, p.name));
   if (p.tagline) hero.append(el("p", "hero-tagline", p.tagline));
-  if (p.description) hero.append(el("p", "hero-description", p.description));
-  const actions = el("div", "hero-actions");
-  const primaryDoc = (p.docs || []).find(d => d.url);
-  if (primaryDoc) actions.append(extLink(primaryDoc.url, "Get started →", "btn btn-primary"));
-  if (p.source) actions.append(extLink(p.source, "Source code", "btn btn-secondary"));
-  hero.append(actions);
+  if (p.source) {
+    const actions = el("div", "hero-actions");
+    actions.append(extLink(p.source, "Source code →", "btn btn-secondary"));
+    hero.append(actions);
+  }
   return hero;
 }
 
-function renderInstall(p) {
+function renderE2eBanner(live) {
+  const images = live?.images || [];
+  const e2eImg = images.find(i => i.name === "E2E Tests");
+  const workflows = live?.workflows || [];
+  const ciGates = workflows.filter(w =>
+    w.name.toLowerCase().includes("required ci gates") ||
+    w.name.toLowerCase().includes("e2e")
+  );
+
+  const banner = el("div", "e2e-banner");
+  const title = el("div", "e2e-banner-title");
+  title.append(el("strong", null, "E2E Tests"));
+
+  if (e2eImg) {
+    const hasStable = e2eImg.pull != null;
+    if (hasStable) {
+      title.append(el("span", "pill pill-ok", "Passing"));
+      banner.classList.add("e2e-ok");
+    } else {
+      title.append(el("span", "pill pill-warn", "Unknown"));
+    }
+    banner.append(title);
+
+    const details = el("div", "e2e-details");
+    if (e2eImg.lastModified) {
+      details.append(el("span", null, "Latest build: " + formatDate(e2eImg.lastModified)));
+    }
+    if (e2eImg.pull?.digest) {
+      details.append(el("span", "e2e-digest", shortDigest(e2eImg.pull.digest)));
+    }
+    const repoShort = e2eImg.repository.replace("quay.io/", "");
+    details.append(extLink(`https://quay.io/repository/${repoShort}?tab=tags`, "View on Quay →", "e2e-link"));
+    banner.append(details);
+
+    if (e2eImg.builds?.length) {
+      const recent = el("div", "e2e-recent");
+      recent.append(el("span", "e2e-recent-label", "Recent builds:"));
+      for (const b of e2eImg.builds.slice(0, 3)) {
+        const tag = el("span", "e2e-tag");
+        const shortName = b.name.length > 16 ? b.name.slice(0, 12) + "…" : b.name;
+        tag.textContent = shortName;
+        tag.title = b.name;
+        recent.append(tag);
+      }
+      banner.append(recent);
+    }
+  } else {
+    title.append(el("span", "pill pill-neutral", "Not found"));
+    banner.append(title);
+  }
+
+  if (ciGates.length) {
+    const gates = el("div", "e2e-gates");
+    for (const wf of ciGates) {
+      const row = el("div", "e2e-gate-row");
+      const [label, cls] = statusPill(wf);
+      row.append(el("span", "pill " + cls, label));
+      row.append(el("span", "e2e-gate-name", `${wf.name}`));
+      const repoShort = wf.repo.split("/").pop();
+      row.append(el("span", "e2e-gate-repo", repoShort));
+      if (wf.updatedAt) row.append(el("span", "e2e-gate-time", formatDate(wf.updatedAt)));
+      if (wf.url) row.append(extLink(wf.url, "View", "e2e-gate-link"));
+      gates.append(row);
+    }
+    banner.append(gates);
+  }
+
+  return banner;
+}
+
+function renderReleases(product, live) {
   const section = el("div", "section");
-  section.id = "install";
-  section.append(el("h2", null, "Install"));
-  section.append(el("p", "section-lead", "Choose the method that fits your environment."));
-  if (p.requirements) {
-    const req = el("div", "requirements");
-    req.append(el("strong", null, "Requirements: "));
-    req.append(document.createTextNode(p.requirements));
-    section.append(req);
+  const releases = live?.releases || [];
+  if (!releases.length) {
+    section.append(el("p", "section-lead", "No version-tagged releases found."));
+    return section;
   }
-  const grid = el("div", "cards");
-  for (const dl of p.downloads || []) {
-    const card = el("div", "card");
-    card.append(el("h3", null, dl.title));
-    if (dl.detail) card.append(el("p", null, dl.detail));
-    card.append(cmdBlock(dl.value));
-    grid.append(card);
+
+  const heading = el("h2", null, "Version releases");
+  section.append(heading);
+  section.append(el("p", "section-lead", "Version-tagged builds across core components, built through the Konflux pipeline."));
+
+  for (const rel of releases) {
+    const row = el("div", "release-row");
+    const header = el("div", "release-header");
+    const title = el("div", "release-title");
+    title.append(el("strong", null, `OpenShell ${rel.upstreamVersion}`));
+    title.append(el("span", "release-tag", rel.tag));
+    header.append(title);
+    const pillText = rel.allBuilt ? "All built" : "Partial";
+    const pillCls = rel.allBuilt ? "pill pill-ok" : "pill pill-warn";
+    header.append(el("span", pillCls, pillText));
+    row.append(header);
+
+    const compList = el("div", "release-components");
+    for (const comp of rel.components || []) {
+      const item = el("div", "release-comp");
+      const statusIcon = comp.found ? "✓" : "✗";
+      const statusCls = comp.found ? "comp-ok" : "comp-missing";
+      item.append(el("span", statusCls, statusIcon));
+      const nameShort = comp.repository.replace("quay.io/opendatahub/", "");
+      item.append(el("span", "comp-label", `${nameShort}:${comp.tag}`));
+      if (comp.found && comp.lastModified) {
+        item.append(el("span", "comp-meta", formatDate(comp.lastModified)));
+      }
+      if (comp.found) {
+        item.append(extLink(`${comp.registryUrl}?tab=tags&tag=${comp.tag}`, "Quay", "comp-link"));
+      }
+      compList.append(item);
+    }
+    row.append(compList);
+    section.append(row);
   }
-  section.append(grid);
   return section;
 }
 
-function renderDocs(p) {
+function renderImages(product, live) {
   const section = el("div", "section");
-  section.id = "docs";
-  section.append(el("h2", null, "Documentation"));
-  section.append(el("p", "section-lead", "Everything you need to deploy, configure, and operate."));
-  const grid = el("div", "cards");
-  for (const doc of p.docs || []) {
-    const card = extLink(doc.url, null, "card doc-card");
-    card.append(el("h3", null, doc.title));
-    if (doc.detail) card.append(el("p", null, doc.detail));
-    card.append(el("span", "doc-open", "Open →"));
-    grid.append(card);
-  }
-  section.append(grid);
-  return section;
-}
-
-function renderImages(p, live) {
-  const section = el("div", "section");
-  section.id = "images";
   section.append(el("h2", null, "Container images"));
-  section.append(el("p", "section-lead", "Published to the public Open Data Hub Quay organisation. Pull with podman or docker."));
+  section.append(el("p", "section-lead", "Published to the Open Data Hub Quay organisation. Pull with podman or docker."));
   const liveImages = new Map((live?.images || []).map(i => [i.repository, i]));
   const grid = el("div", "image-row");
-  for (const img of p.images || []) {
+  for (const img of product.images || []) {
     const card = el("div", "image-card");
-    card.append(el("h3", null, img.name));
+    const headerRow = el("div", "image-header");
+    headerRow.append(el("h3", null, img.name));
+    if (img.release) headerRow.append(el("span", "image-badge", "Release"));
+    if (img.name === "E2E Tests") headerRow.append(el("span", "image-badge image-badge-e2e", "E2E"));
+    card.append(headerRow);
     if (img.role) card.append(el("p", "role", img.role));
     const tag = img.pullTag || "odh-stable";
     card.append(cmdBlock(`podman pull ${img.repository}:${tag}`));
@@ -189,6 +315,21 @@ function renderImages(p, live) {
     const repo = img.repository.replace("quay.io/", "");
     meta.append(extLink(`https://quay.io/repository/${repo}`, "View on Quay →", null));
     card.append(meta);
+
+    if (liveImg?.builds?.length) {
+      const builds = el("div", "image-builds");
+      builds.append(el("span", "image-builds-label", "Recent builds"));
+      for (const b of liveImg.builds.slice(0, 3)) {
+        const bRow = el("div", "image-build-row");
+        const shortName = b.name.length > 20 ? b.name.slice(0, 16) + "…" : b.name;
+        bRow.append(el("span", "image-build-tag", shortName));
+        bRow.title = b.name;
+        if (b.lastModified) bRow.append(el("span", "image-build-time", formatDate(b.lastModified)));
+        builds.append(bRow);
+      }
+      card.append(builds);
+    }
+
     grid.append(card);
   }
   section.append(grid);
@@ -196,10 +337,12 @@ function renderImages(p, live) {
 }
 
 function renderChecks(live) {
-  const workflows = live?.workflows || [];
-  if (!workflows.length) return null;
   const section = el("div", "section");
-  section.id = "checks";
+  const workflows = live?.workflows || [];
+  if (!workflows.length) {
+    section.append(el("p", "section-lead", "No CI workflow data available."));
+    return section;
+  }
   section.append(el("h2", null, "CI status"));
   section.append(el("p", "section-lead", "Public GitHub Actions workflows across downstream and upstream repositories."));
 
@@ -232,61 +375,63 @@ function renderChecks(live) {
   return section;
 }
 
-function renderReleases(live) {
-  const releases = live?.releases || [];
-  if (!releases.length) return null;
+function renderStatus(product, live) {
   const section = el("div", "section");
-  section.id = "releases";
-  section.append(el("h2", null, "Releases"));
-  section.append(el("p", "section-lead", "Version-tagged builds across all core components. Each release is built and tested through the Konflux shift-left pipeline."));
-
-  for (const rel of releases) {
-    const row = el("div", "release-row");
-    const header = el("div", "release-header");
-    const title = el("div", "release-title");
-    title.append(el("strong", null, `OpenShell ${rel.upstreamVersion}`));
-    title.append(el("span", "release-tag", rel.tag));
-    header.append(title);
-    const pillText = rel.allBuilt ? "All built" : "Partial";
-    const pillCls = rel.allBuilt ? "pill pill-ok" : "pill pill-warn";
-    header.append(el("span", pillCls, pillText));
-    row.append(header);
-
-    const compList = el("div", "release-components");
-    for (const comp of rel.components || []) {
-      const item = el("div", "release-comp");
-      const statusIcon = comp.found ? "✓" : "✗";
-      const statusCls = comp.found ? "comp-ok" : "comp-missing";
-      item.append(el("span", statusCls, statusIcon));
-      const repoShort = comp.repository.replace("quay.io/", "");
-      const label = el("span", "comp-label");
-      label.textContent = `${repoShort}:${comp.tag}`;
-      item.append(label);
-      if (comp.found && comp.lastModified) {
-        item.append(el("span", "comp-meta", formatDate(comp.lastModified)));
-      }
-      if (comp.found) {
-        item.append(extLink(`${comp.registryUrl}?tab=tags&tag=${comp.tag}`, "Quay", "comp-link"));
-      }
-      compList.append(item);
-    }
-    row.append(compList);
-    section.append(row);
-  }
+  section.append(renderE2eBanner(live));
+  section.append(renderChecks(live));
   return section;
 }
+
+function renderInstall(p) {
+  const section = el("div", "section");
+  section.append(el("h2", null, "Install"));
+  section.append(el("p", "section-lead", "Choose the method that fits your environment."));
+  if (p.requirements) {
+    const req = el("div", "requirements");
+    req.append(el("strong", null, "Requirements: "));
+    req.append(document.createTextNode(p.requirements));
+    section.append(req);
+  }
+  const grid = el("div", "cards");
+  for (const dl of p.downloads || []) {
+    const card = el("div", "card");
+    card.append(el("h3", null, dl.title));
+    if (dl.detail) card.append(el("p", null, dl.detail));
+    card.append(cmdBlock(dl.value));
+    grid.append(card);
+  }
+  section.append(grid);
+  return section;
+}
+
+function renderDocs(p) {
+  const section = el("div", "section");
+  section.append(el("h2", null, "Documentation"));
+  section.append(el("p", "section-lead", "Everything you need to deploy, configure, and operate."));
+  const grid = el("div", "cards");
+  for (const doc of p.docs || []) {
+    const card = extLink(doc.url, null, "card doc-card");
+    card.append(el("h3", null, doc.title));
+    if (doc.detail) card.append(el("p", null, doc.detail));
+    card.append(el("span", "doc-open", "Open →"));
+    grid.append(card);
+  }
+  section.append(grid);
+  return section;
+}
+
+/* ── Product page assembly ──────────────────────────────────────────── */
 
 function renderProduct(p) {
   const live = liveProduct(p.key);
   const fragment = document.createDocumentFragment();
   fragment.append(renderHero(p));
-  const releases = renderReleases(live);
-  if (releases) fragment.append(releases);
-  fragment.append(renderInstall(p));
-  fragment.append(renderImages(p, live));
-  fragment.append(renderDocs(p));
-  const checks = renderChecks(live);
-  if (checks) fragment.append(checks);
+  fragment.append(renderTabs(p, live));
+  const pane = el("div", null);
+  pane.id = "tab-pane";
+  activeTab = "status";
+  pane.append(renderTabContent("status", p, live));
+  fragment.append(pane);
   contentInner.replaceChildren(fragment);
 }
 
