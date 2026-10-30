@@ -232,13 +232,59 @@ function renderChecks(live) {
   return section;
 }
 
+function renderReleases(live) {
+  const releases = live?.releases || [];
+  if (!releases.length) return null;
+  const section = el("div", "section");
+  section.id = "releases";
+  section.append(el("h2", null, "Releases"));
+  section.append(el("p", "section-lead", "Version-tagged builds across all core components. Each release is built and tested through the Konflux shift-left pipeline."));
+
+  for (const rel of releases) {
+    const row = el("div", "release-row");
+    const header = el("div", "release-header");
+    const title = el("div", "release-title");
+    title.append(el("strong", null, `OpenShell ${rel.upstreamVersion}`));
+    title.append(el("span", "release-tag", rel.tag));
+    header.append(title);
+    const pillText = rel.allBuilt ? "All built" : "Partial";
+    const pillCls = rel.allBuilt ? "pill pill-ok" : "pill pill-warn";
+    header.append(el("span", pillCls, pillText));
+    row.append(header);
+
+    const compList = el("div", "release-components");
+    for (const comp of rel.components || []) {
+      const item = el("div", "release-comp");
+      const statusIcon = comp.found ? "✓" : "✗";
+      const statusCls = comp.found ? "comp-ok" : "comp-missing";
+      item.append(el("span", statusCls, statusIcon));
+      const repoShort = comp.repository.replace("quay.io/", "");
+      const label = el("span", "comp-label");
+      label.textContent = `${repoShort}:${comp.tag}`;
+      item.append(label);
+      if (comp.found && comp.lastModified) {
+        item.append(el("span", "comp-meta", formatDate(comp.lastModified)));
+      }
+      if (comp.found) {
+        item.append(extLink(`${comp.registryUrl}?tab=tags&tag=${comp.tag}`, "Quay", "comp-link"));
+      }
+      compList.append(item);
+    }
+    row.append(compList);
+    section.append(row);
+  }
+  return section;
+}
+
 function renderProduct(p) {
   const live = liveProduct(p.key);
   const fragment = document.createDocumentFragment();
   fragment.append(renderHero(p));
+  const releases = renderReleases(live);
+  if (releases) fragment.append(releases);
   fragment.append(renderInstall(p));
-  fragment.append(renderDocs(p));
   fragment.append(renderImages(p, live));
+  fragment.append(renderDocs(p));
   const checks = renderChecks(live);
   if (checks) fragment.append(checks);
   contentInner.replaceChildren(fragment);

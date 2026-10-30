@@ -142,14 +142,107 @@ def summarize_workflow(workflow: dict, run: dict | None) -> dict:
     return summary
 
 
+def fetch_version_tag(repository: str, version: str) -> dict | None:
+    """Look up a specific version tag on a Quay repository."""
+    namespace, name = quay_namespace(repository)
+    base = f"https://quay.io/api/v1/repository/{namespace}/{name}/tag/"
+    data = fetch_json(f"{base}?specificTag={version}&limit=1")
+    tags = (data or {}).get("tags") or []
+    return tags[0] if tags else None
+
+
+def fetch_releases(repo: str, headers: dict[str, str]) -> list[dict]:
+    """Fetch version tags from a GitHub repo, returning rhaiv releases."""
+    import re
+
+    payload = fetch_json(
+        f"https://api.github.com/repos/{repo}/tags?per_page=100",
+        headers,
+    )
+    if payload is None:
+        return []
+    releases = []
+    for tag_obj in payload:
+        name = tag_obj.get("name") or ""
+        match = re.match(r"v(\d+\.\d+\.\d+)-rhaiv\.(\d+)", name)
+        if not match:
+            continue
+        upstream_version = match.group(1)
+        rhaiv_number = int(match.group(2))
+        releases.append(
+            {
+                "tag": name,
+                "upstreamVersion": upstream_version,
+                "rhaivNumber": rhaiv_number,
+                "commitSha": tag_obj.get("commit", {}).get("sha"),
+            }
+        )
+    releases.sort(key=lambda r: (r["upstreamVersion"], r["rhaivNumber"]), reverse=True)
+    return releases
+
+
+def correlate_releases(
+    releases: list[dict],
+    images: list[dict],
+    tags_by_repo: dict[str, list[dict]],
+    limit: int = 8,
+) -> list[dict]:
+    """For each release tag, check which images have a matching Quay tag."""
+    release_images = [img for img in images if img.get("release")]
+    result = []
+    for rel in releases[:limit]:
+        tag_name = rel["tag"]
+        components = []
+        all_found = True
+        for img in release_images:
+            repo = img["repository"]
+            quay_tag = fetch_version_tag(repo, tag_name)
+            found = quay_tag is not None
+            if not found:
+                all_found = False
+            components.append(
+                {
+                    "name": img["name"],
+                    "repository": repo,
+                    "registryUrl": registry_url(repo),
+                    "tag": tag_name,
+                    "found": found,
+                    "digest": (quay_tag.get("manifest_digest") if quay_tag else None),
+                    "lastModified": (
+                        quay_tag.get("last_modified") if quay_tag else None
+                    ),
+                }
+            )
+        result.append(
+            {
+                "tag": tag_name,
+                "upstreamVersion": rel["upstreamVersion"],
+                "rhaivNumber": rel["rhaivNumber"],
+                "commitSha": rel.get("commitSha"),
+                "allBuilt": all_found,
+                "components": components,
+            }
+        )
+    return result
+
+
 def build_status(
     catalog: dict,
     tags_by_repo: dict[str, list[dict]],
     runs_by_key: dict[tuple[str, str], dict | None],
+    releases_by_repo: dict[str, list[dict]],
     generated_at: str,
 ) -> dict:
     products = []
     for product in catalog["products"]:
+        release_repo = product.get("releaseRepo")
+        releases = []
+        if release_repo and release_repo in releases_by_repo:
+            releases = correlate_releases(
+                releases_by_repo[release_repo],
+                product.get("images") or [],
+                tags_by_repo,
+            )
         products.append(
             {
                 "key": product["key"],
@@ -170,6 +263,7 @@ def build_status(
                     )
                     for workflow in product.get("workflows") or []
                 ],
+                "releases": releases,
             }
         )
     return {"generatedAt": generated_at, "products": products}
@@ -283,6 +377,7 @@ def collect(catalog: dict) -> dict:
     tags_by_repo: dict[str, list[dict]] = {}
     runs_by_key: dict[tuple[str, str], dict | None] = {}
     workflow_indexes: dict[str, dict[str, dict]] = {}
+    releases_by_repo: dict[str, list[dict]] = {}
 
     for product in catalog["products"]:
         for image in product.get("images") or []:
@@ -298,9 +393,12 @@ def collect(catalog: dict) -> dict:
                 runs_by_key[(repo, workflow["name"])] = None
                 continue
             runs_by_key[(repo, workflow["name"])] = fetch_latest_run(repo, match["id"], headers)
+        release_repo = product.get("releaseRepo")
+        if release_repo and release_repo not in releases_by_repo:
+            releases_by_repo[release_repo] = fetch_releases(release_repo, headers)
 
     generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    return build_status(catalog, tags_by_repo, runs_by_key, generated_at)
+    return build_status(catalog, tags_by_repo, runs_by_key, releases_by_repo, generated_at)
 
 
 def main() -> int:

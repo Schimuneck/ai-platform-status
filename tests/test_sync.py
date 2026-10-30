@@ -142,6 +142,7 @@ class StatusAssemblyTest(unittest.TestCase):
             catalog,
             {"quay.io/opendatahub/odh-openshell-gateway": tags},
             runs,
+            {},
             "2026-10-28T19:00:00+00:00",
         )
         image = status["products"][0]["images"][0]

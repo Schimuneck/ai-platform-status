@@ -398,6 +398,77 @@ body {
 .pill-info { background: #e7f1fa; color: var(--info); }
 .pill-neutral { background: #f0f0f0; color: #6a6e73; }
 
+/* ── Releases ───────────────────────────────────────────────────────── */
+.release-row {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  margin-bottom: .5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.release-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .5rem;
+}
+
+.release-title {
+  display: flex;
+  align-items: baseline;
+  gap: .6rem;
+}
+
+.release-title strong {
+  font-size: 1rem;
+}
+
+.release-tag {
+  font-size: .78rem;
+  color: var(--ink-secondary);
+  font-family: var(--mono);
+}
+
+.release-components {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+}
+
+.release-comp {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: .82rem;
+  padding: .2rem 0;
+}
+
+.comp-ok { color: var(--ok); font-weight: 700; }
+.comp-missing { color: var(--bad); font-weight: 700; }
+
+.comp-label {
+  font-family: var(--mono);
+  font-size: .78rem;
+  color: var(--ink);
+}
+
+.comp-meta {
+  color: var(--ink-secondary);
+  font-size: .72rem;
+}
+
+.comp-link {
+  font-size: .72rem;
+  color: var(--red);
+  font-weight: 600;
+  text-decoration: none;
+  margin-left: auto;
+}
+
+.comp-link:hover { text-decoration: underline; }
+
 /* ── Requirements ───────────────────────────────────────────────────── */
 .requirements {
   display: flex;
