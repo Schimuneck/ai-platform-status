@@ -116,11 +116,11 @@ function selectProduct(key) {
 /* ── Tab system ─────────────────────────────────────────────────────── */
 
 const TABS = [
+  { id: "install", label: "Install" },
+  { id: "images", label: "Container Images" },
+  { id: "docs", label: "Documentation" },
   { id: "status", label: "Status" },
   { id: "releases", label: "Releases" },
-  { id: "images", label: "Container Images" },
-  { id: "install", label: "Install" },
-  { id: "docs", label: "Documentation" },
 ];
 
 function renderTabs(product, live) {
@@ -129,7 +129,7 @@ function renderTabs(product, live) {
     const btn = el("button", "tab-btn", tab.label);
     btn.dataset.tab = tab.id;
     btn.type = "button";
-    if (tab.id === "status") btn.classList.add("active");
+    if (tab.id === "install") btn.classList.add("active");
     btn.addEventListener("click", () => switchTab(tab.id, product, live));
     bar.append(btn);
   }
@@ -429,8 +429,8 @@ function renderProduct(p) {
   fragment.append(renderTabs(p, live));
   const pane = el("div", null);
   pane.id = "tab-pane";
-  activeTab = "status";
-  pane.append(renderTabContent("status", p, live));
+  activeTab = "install";
+  pane.append(renderTabContent("install", p, live));
   fragment.append(pane);
   contentInner.replaceChildren(fragment);
 }
