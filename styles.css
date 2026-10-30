@@ -157,7 +157,13 @@ body {
   font-size: 1.05rem;
   color: var(--ink-secondary);
   max-width: 60ch;
-  margin-bottom: .8rem;
+  margin-bottom: .4rem;
+}
+
+.hero-description {
+  color: var(--ink-secondary);
+  max-width: 65ch;
+  margin-bottom: 1.4rem;
 }
 
 .hero-actions {
