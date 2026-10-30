@@ -39,6 +39,37 @@ function statusPill(workflow) {
   return ["No data", "pill-neutral"];
 }
 
+/* ── Pagination ─────────────────────────────────────────────────────── */
+
+const PAGE_SIZE = 10;
+
+function paginate(items, page) {
+  const start = (page - 1) * PAGE_SIZE;
+  return {
+    items: items.slice(start, start + PAGE_SIZE),
+    page,
+    totalPages: Math.max(1, Math.ceil(items.length / PAGE_SIZE)),
+    total: items.length,
+  };
+}
+
+function renderPager(page, totalPages, onPage) {
+  if (totalPages <= 1) return null;
+  const bar = el("div", "pager");
+  const prev = el("button", "pager-btn", "← Previous");
+  prev.type = "button";
+  prev.disabled = page <= 1;
+  prev.addEventListener("click", () => onPage(page - 1));
+  bar.append(prev);
+  bar.append(el("span", "pager-info", `Page ${page} of ${totalPages}`));
+  const next = el("button", "pager-btn", "Next →");
+  next.type = "button";
+  next.disabled = page >= totalPages;
+  next.addEventListener("click", () => onPage(page + 1));
+  bar.append(next);
+  return bar;
+}
+
 async function copyCmd(text, btn) {
   const orig = btn.textContent;
   try { await navigator.clipboard.writeText(text); btn.textContent = "Copied!"; }
@@ -246,19 +277,12 @@ function renderE2eBanner(live) {
   return banner;
 }
 
-function renderReleases(product, live) {
-  const section = el("div", "section");
-  const releases = live?.releases || [];
-  if (!releases.length) {
-    section.append(el("p", "section-lead", "No version-tagged releases found."));
-    return section;
-  }
+function renderReleaseList(releases, page) {
+  const container = el("div", null);
+  container.id = "release-list";
+  const { items, totalPages } = paginate(releases, page);
 
-  const heading = el("h2", null, "Version releases");
-  section.append(heading);
-  section.append(el("p", "section-lead", "Version-tagged builds across core components, built through the Konflux pipeline."));
-
-  for (const rel of releases) {
+  for (const rel of items) {
     const row = el("div", "release-row");
     const header = el("div", "release-header");
     const title = el("div", "release-title");
@@ -287,9 +311,78 @@ function renderReleases(product, live) {
       compList.append(item);
     }
     row.append(compList);
-    section.append(row);
+    container.append(row);
   }
+
+  const pager = renderPager(page, totalPages, p => {
+    const old = document.getElementById("release-list");
+    old.replaceWith(renderReleaseList(releases, p));
+  });
+  if (pager) container.append(pager);
+  return container;
+}
+
+function renderReleases(product, live) {
+  const section = el("div", "section");
+  const releases = live?.releases || [];
+  if (!releases.length) {
+    section.append(el("p", "section-lead", "No version-tagged releases found."));
+    return section;
+  }
+  section.append(el("h2", null, "Version releases"));
+  section.append(el("p", "section-lead", "Version-tagged builds across core components, built through the Konflux pipeline."));
+  section.append(renderReleaseList(releases, 1));
   return section;
+}
+
+function renderImageCard(img, liveImg) {
+  const card = el("div", "image-card");
+  const headerRow = el("div", "image-header");
+  headerRow.append(el("h3", null, img.name));
+  if (img.release) headerRow.append(el("span", "image-badge", "Release"));
+  if (img.name === "E2E Tests") headerRow.append(el("span", "image-badge image-badge-e2e", "E2E"));
+  card.append(headerRow);
+  if (img.role) card.append(el("p", "role", img.role));
+  const tag = img.pullTag || "odh-stable";
+  card.append(cmdBlock(`podman pull ${img.repository}:${tag}`));
+  const meta = el("div", "image-meta");
+  if (liveImg?.pull) {
+    meta.innerHTML = `<strong>${tag}</strong> · ${shortDigest(liveImg.pull.digest)} · ${formatDate(liveImg.pull.lastModified)}<br/>`;
+  }
+  const repo = img.repository.replace("quay.io/", "");
+  meta.append(extLink(`https://quay.io/repository/${repo}`, "View on Quay →", null));
+  card.append(meta);
+
+  if (liveImg?.builds?.length) {
+    const builds = el("div", "image-builds");
+    builds.append(el("span", "image-builds-label", "Recent builds"));
+    for (const b of liveImg.builds.slice(0, 3)) {
+      const bRow = el("div", "image-build-row");
+      const shortName = b.name.length > 20 ? b.name.slice(0, 16) + "…" : b.name;
+      bRow.append(el("span", "image-build-tag", shortName));
+      bRow.title = b.name;
+      if (b.lastModified) bRow.append(el("span", "image-build-time", formatDate(b.lastModified)));
+      builds.append(bRow);
+    }
+    card.append(builds);
+  }
+  return card;
+}
+
+function renderImageGrid(images, liveImages, page) {
+  const container = el("div", null);
+  container.id = "image-grid";
+  const { items, totalPages } = paginate(images, page);
+  const grid = el("div", "image-row");
+  for (const img of items) {
+    grid.append(renderImageCard(img, liveImages.get(img.repository)));
+  }
+  container.append(grid);
+  const pager = renderPager(page, totalPages, p => {
+    document.getElementById("image-grid").replaceWith(renderImageGrid(images, liveImages, p));
+  });
+  if (pager) container.append(pager);
+  return container;
 }
 
 function renderImages(product, live) {
@@ -297,53 +390,46 @@ function renderImages(product, live) {
   section.append(el("h2", null, "Container images"));
   section.append(el("p", "section-lead", "Published to the Open Data Hub Quay organisation. Pull with podman or docker."));
   const liveImages = new Map((live?.images || []).map(i => [i.repository, i]));
-  const grid = el("div", "image-row");
-  for (const img of product.images || []) {
-    const card = el("div", "image-card");
-    const headerRow = el("div", "image-header");
-    headerRow.append(el("h3", null, img.name));
-    if (img.release) headerRow.append(el("span", "image-badge", "Release"));
-    if (img.name === "E2E Tests") headerRow.append(el("span", "image-badge image-badge-e2e", "E2E"));
-    card.append(headerRow);
-    if (img.role) card.append(el("p", "role", img.role));
-    const tag = img.pullTag || "odh-stable";
-    card.append(cmdBlock(`podman pull ${img.repository}:${tag}`));
-    const liveImg = liveImages.get(img.repository);
-    const meta = el("div", "image-meta");
-    if (liveImg?.pull) {
-      meta.innerHTML = `<strong>${tag}</strong> · ${shortDigest(liveImg.pull.digest)} · ${formatDate(liveImg.pull.lastModified)}<br/>`;
-    }
-    const repo = img.repository.replace("quay.io/", "");
-    meta.append(extLink(`https://quay.io/repository/${repo}`, "View on Quay →", null));
-    card.append(meta);
-
-    if (liveImg?.builds?.length) {
-      const builds = el("div", "image-builds");
-      builds.append(el("span", "image-builds-label", "Recent builds"));
-      for (const b of liveImg.builds.slice(0, 3)) {
-        const bRow = el("div", "image-build-row");
-        const shortName = b.name.length > 20 ? b.name.slice(0, 16) + "…" : b.name;
-        bRow.append(el("span", "image-build-tag", shortName));
-        bRow.title = b.name;
-        if (b.lastModified) bRow.append(el("span", "image-build-time", formatDate(b.lastModified)));
-        builds.append(bRow);
-      }
-      card.append(builds);
-    }
-
-    grid.append(card);
-  }
-  section.append(grid);
+  const allImages = product.images || [];
+  section.append(renderImageGrid(allImages, liveImages, 1));
   return section;
 }
 
-function renderChecks(live) {
+function renderWorkflowPage(workflows, page, paneId) {
+  const container = el("div", null);
+  container.id = paneId;
+  const { items, totalPages } = paginate(workflows, page);
+  const list = el("ul", "checks-list");
+  for (const wf of items) {
+    const row = el("li", "check-row");
+    const info = el("div", "check-info");
+    info.append(el("div", "check-name", wf.name));
+    const meta = [wf.branch, formatDate(wf.updatedAt)].filter(Boolean).join(" · ");
+    if (meta) info.append(el("div", "check-meta", meta));
+    row.append(info);
+    const [label, cls] = statusPill(wf);
+    row.append(el("span", "pill " + cls, label));
+    if (wf.url) row.append(extLink(wf.url, "View", "check-link"));
+    list.append(row);
+  }
+  container.append(list);
+  const pager = renderPager(page, totalPages, p => {
+    document.getElementById(paneId).replaceWith(renderWorkflowPage(workflows, p, paneId));
+  });
+  if (pager) container.append(pager);
+  return container;
+}
+
+function renderStatus(product, live) {
   const section = el("div", "section");
+  section.append(renderE2eBanner(live));
+
   const workflows = live?.workflows || [];
   if (!workflows.length) {
     section.append(el("p", "section-lead", "No CI workflow data available."));
     return section;
   }
+
   section.append(el("h2", null, "CI status"));
   section.append(el("p", "section-lead", "Public GitHub Actions workflows across downstream and upstream repositories."));
 
@@ -353,34 +439,64 @@ function renderChecks(live) {
     if (!groups.has(repo)) groups.set(repo, []);
     groups.get(repo).push(wf);
   }
+  const repos = [...groups.keys()];
 
-  for (const [repo, wfs] of groups) {
+  if (repos.length > 1) {
+    const subBar = el("div", "sub-tab-bar");
+    const pane = el("div", null);
+    pane.id = "status-sub-pane";
+
+    repos.forEach((repo, i) => {
+      const btn = el("button", "sub-tab-btn", repo);
+      btn.dataset.repo = repo;
+      btn.type = "button";
+      if (i === 0) btn.classList.add("active");
+      btn.addEventListener("click", () => {
+        subBar.querySelectorAll(".sub-tab-btn").forEach(b => {
+          b.classList.toggle("active", b.dataset.repo === repo);
+        });
+        const content = el("div", null);
+        content.id = "status-sub-pane";
+        const paneId = "wf-" + repo.replace(/\//g, "-");
+        content.append(renderWorkflowPage(groups.get(repo), 1, paneId));
+        document.getElementById("status-sub-pane").replaceWith(content);
+      });
+      subBar.append(btn);
+    });
+
+    section.append(subBar);
+    const firstPaneId = "wf-" + repos[0].replace(/\//g, "-");
+    pane.append(renderWorkflowPage(groups.get(repos[0]), 1, firstPaneId));
+    section.append(pane);
+  } else if (repos.length === 1) {
     const groupLabel = el("div", "check-group-label");
-    groupLabel.append(extLink(`https://github.com/${repo}/actions`, repo, null));
+    groupLabel.append(extLink(`https://github.com/${repos[0]}/actions`, repos[0], null));
     section.append(groupLabel);
-    const list = el("ul", "checks-list");
-    for (const wf of wfs) {
-      const row = el("li", "check-row");
-      const info = el("div", "check-info");
-      info.append(el("div", "check-name", wf.name));
-      const meta = [wf.branch, formatDate(wf.updatedAt)].filter(Boolean).join(" · ");
-      if (meta) info.append(el("div", "check-meta", meta));
-      row.append(info);
-      const [label, cls] = statusPill(wf);
-      row.append(el("span", "pill " + cls, label));
-      if (wf.url) row.append(extLink(wf.url, "View", "check-link"));
-      list.append(row);
-    }
-    section.append(list);
+    const paneId = "wf-" + repos[0].replace(/\//g, "-");
+    section.append(renderWorkflowPage(groups.get(repos[0]), 1, paneId));
   }
+
   return section;
 }
 
-function renderStatus(product, live) {
-  const section = el("div", "section");
-  section.append(renderE2eBanner(live));
-  section.append(renderChecks(live));
-  return section;
+function renderInstallGrid(downloads, page) {
+  const container = el("div", null);
+  container.id = "install-grid";
+  const { items, totalPages } = paginate(downloads, page);
+  const grid = el("div", "cards");
+  for (const dl of items) {
+    const card = el("div", "card");
+    card.append(el("h3", null, dl.title));
+    if (dl.detail) card.append(el("p", null, dl.detail));
+    card.append(cmdBlock(dl.value));
+    grid.append(card);
+  }
+  container.append(grid);
+  const pager = renderPager(page, totalPages, p => {
+    document.getElementById("install-grid").replaceWith(renderInstallGrid(downloads, p));
+  });
+  if (pager) container.append(pager);
+  return container;
 }
 
 function renderInstall(p) {
@@ -393,31 +509,35 @@ function renderInstall(p) {
     req.append(document.createTextNode(p.requirements));
     section.append(req);
   }
-  const grid = el("div", "cards");
-  for (const dl of p.downloads || []) {
-    const card = el("div", "card");
-    card.append(el("h3", null, dl.title));
-    if (dl.detail) card.append(el("p", null, dl.detail));
-    card.append(cmdBlock(dl.value));
-    grid.append(card);
-  }
-  section.append(grid);
+  section.append(renderInstallGrid(p.downloads || [], 1));
   return section;
 }
 
-function renderDocs(p) {
-  const section = el("div", "section");
-  section.append(el("h2", null, "Documentation"));
-  section.append(el("p", "section-lead", "Everything you need to deploy, configure, and operate."));
+function renderDocsGrid(docs, page) {
+  const container = el("div", null);
+  container.id = "docs-grid";
+  const { items, totalPages } = paginate(docs, page);
   const grid = el("div", "cards");
-  for (const doc of p.docs || []) {
+  for (const doc of items) {
     const card = extLink(doc.url, null, "card doc-card");
     card.append(el("h3", null, doc.title));
     if (doc.detail) card.append(el("p", null, doc.detail));
     card.append(el("span", "doc-open", "Open →"));
     grid.append(card);
   }
-  section.append(grid);
+  container.append(grid);
+  const pager = renderPager(page, totalPages, p => {
+    document.getElementById("docs-grid").replaceWith(renderDocsGrid(docs, p));
+  });
+  if (pager) container.append(pager);
+  return container;
+}
+
+function renderDocs(p) {
+  const section = el("div", "section");
+  section.append(el("h2", null, "Documentation"));
+  section.append(el("p", "section-lead", "Everything you need to deploy, configure, and operate."));
+  section.append(renderDocsGrid(p.docs || [], 1));
   return section;
 }
 
