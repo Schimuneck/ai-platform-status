@@ -34,7 +34,9 @@ jobs:
       - name: Prepare site
         run: |
           mkdir -p _site/data
-          cp index.html styles.css app.js products.json _site/
+          BUST=$(date +%s)
+          sed "s|styles.css|styles.css?v=$BUST|;s|app.js|app.js?v=$BUST|" index.html > _site/index.html
+          cp styles.css app.js products.json _site/
           cp data/status.json _site/data/
 
       - uses: actions/upload-pages-artifact@v3
